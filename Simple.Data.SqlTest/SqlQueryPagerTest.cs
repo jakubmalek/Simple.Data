@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Linq;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Simple.Data.Ado;
@@ -41,10 +38,11 @@ namespace Simple.Data.SqlTest
         [Test]
         public void ShouldApplyPagingUsingOrderBy()
         {
-            var sql = "select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] from [dbo].[d] where [dbo].[d].[a] = 1 order by [dbo].[d].[c]";
+            const string sql = "select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] from [dbo].[d] where [dbo].[d].[a] = 1 order by [dbo].[d].[c]";
             var expected = new[]{
-                "with __data as (select [dbo].[d].[a], row_number() over(order by [dbo].[d].[c]) as [_#_] from [dbo].[d] where [dbo].[d].[a] = 1)"
-                + " select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] from __data join [dbo].[d] on [dbo].[d].[a] = __data.[a] where [dbo].[d].[a] = 1 and [_#_] between 6 and 15"};
+                "with __data as (select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] , row_number() over (order by [dbo].[d].[c] ) as [_#_] " +
+                "from [dbo].[d] where [dbo].[d].[a] = 1 ) " +
+                "select * from __data where [_#_] between 6 and 15 order by [_#_]"};
 
             var pagedSql = new SqlQueryPager().ApplyPaging(sql, new[] {"[dbo].[d].[a]"}, 5, 10);
             var modified = pagedSql.Select(x => Normalize.Replace(x, " ").ToLowerInvariant()).ToArray();
@@ -55,10 +53,11 @@ namespace Simple.Data.SqlTest
         [Test]
         public void ShouldApplyPagingUsingOrderByKeysIfNotAlreadyOrdered()
         {
-            var sql = "select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] from [dbo].[d] where [dbo].[d].[a] = 1";
+            const string sql = "select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] from [dbo].[d] where [dbo].[d].[a] = 1";
             var expected = new[]{
-                "with __data as (select [dbo].[d].[a], row_number() over(order by [dbo].[d].[a]) as [_#_] from [dbo].[d] where [dbo].[d].[a] = 1)"
-                + " select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] from __data join [dbo].[d] on [dbo].[d].[a] = __data.[a] where [dbo].[d].[a] = 1 and [_#_] between 11 and 30"};
+                "with __data as (select [dbo].[d].[a],[dbo].[d].[b],[dbo].[d].[c] , row_number() over (order by [dbo].[d].[a]) as [_#_] " +
+                "from [dbo].[d] where [dbo].[d].[a] = 1 ) " +
+                "select * from __data where [_#_] between 11 and 30 order by [_#_]"};
 
             var pagedSql = new SqlQueryPager().ApplyPaging(sql, new[] {"[dbo].[d].[a]"}, 10, 20);
             var modified = pagedSql.Select(x => Normalize.Replace(x, " ").ToLowerInvariant()).ToArray();
@@ -69,10 +68,12 @@ namespace Simple.Data.SqlTest
         [Test]
         public void ShouldCopeWithAliasedColumns()
         {
-            var sql = "select [dbo].[d].[a],[dbo].[d].[b] as [foo],[dbo].[d].[c] from [dbo].[d] where [dbo].[d].[a] = 1";
+            const string sql = "select [dbo].[d].[a],[dbo].[d].[b] as [foo],[dbo].[d].[c] from [dbo].[d] where [dbo].[d].[a] = 1";
             var expected =new[]{
-                "with __data as (select [dbo].[d].[a], row_number() over(order by [dbo].[d].[a]) as [_#_] from [dbo].[d] where [dbo].[d].[a] = 1)"
-                + " select [dbo].[d].[a],[dbo].[d].[b] as [foo],[dbo].[d].[c] from __data join [dbo].[d] on [dbo].[d].[a] = __data.[a] where [dbo].[d].[a] = 1 and [_#_] between 21 and 25"};
+                "with __data as (select [dbo].[d].[a],[dbo].[d].[b] as [foo],[dbo].[d].[c] , row_number() over (order by [dbo].[d].[a]) as [_#_] " +
+                "from [dbo].[d] " +
+                "where [dbo].[d].[a] = 1 ) " +
+                "select * from __data where [_#_] between 21 and 25 order by [_#_]"};
 
             var pagedSql = new SqlQueryPager().ApplyPaging(sql, new[]{"[dbo].[d].[a]"}, 20, 5);
             var modified = pagedSql.Select(x => Normalize.Replace(x, " ").ToLowerInvariant()).ToArray();
@@ -87,7 +88,11 @@ namespace Simple.Data.SqlTest
     from [dbo].[PromoPosts] 
     ORDER BY [dbo].[PromoPosts].[ActiveFrom]";
 
-            var expected = @"with __data as (select [dbo].[promoposts].[id], row_number() over(order by [dbo].[promoposts].[activefrom]) as [_#_] from [dbo].[promoposts]) select [dbo].[promoposts].[id],[dbo].[promoposts].[activefrom],[dbo].[promoposts].[activeto],[dbo].[promoposts].[created],[dbo].[promoposts].[updated] from __data join [dbo].[promoposts] on [dbo].[promoposts].[id] = __data.[id] and [_#_] between 1 and 25";
+            var expected = "WITH __Data as (" +
+                           "SELECT [dbo].[PromoPosts].[id],[dbo].[PromoPosts].[ActiveFrom],[dbo].[PromoPosts].[ActiveTo],[dbo].[PromoPosts].[Created],[dbo].[PromoPosts].[Updated] , " +
+                           "ROW_NUMBER() over (ORDER BY [dbo].[PromoPosts].[ActiveFrom] ) as [_#_] " +
+                           "FROM [dbo].[PromoPosts] ) " +
+                           "SELECT * FROM __Data WHERE [_#_] BETWEEN 1 AND 25 ORDER BY [_#_]";
             expected = expected.ToLowerInvariant();
 
             var pagedSql = new SqlQueryPager().ApplyPaging(sql, new[] {"[dbo].[PromoPosts].[Id]"}, 0, 25).Single();
@@ -107,7 +112,11 @@ namespace Simple.Data.SqlTest
     [dbo].[ChildClass].[SomeProperty] AS [__withn__ChildClass__SomeProperty],
     [dbo].[ChildClass].[SomeProperty2] AS [__withn__ChildClass__SomeProperty2] FROM [dbo].[MainClass] LEFT JOIN [dbo].[JoinTable] ON ([dbo].[MainClass].[ID] = [dbo].[JoinTable].[MainClassID]) LEFT JOIN [dbo].[ChildClass] ON ([dbo].[ChildClass].[ID] = [dbo].[JoinTable].[ChildClassID]) WHERE ([dbo].[MainClass].[SomeProperty] > @p1 AND [dbo].[MainClass].[SomeProperty] <= @p2)";
 
-            const string expected = @"with __data as (select [dbo].[promoposts].[id], row_number() over(order by [dbo].[promoposts].[id]) as [_#_] from [dbo].[mainclass] where ([dbo].[mainclass].[someproperty] > @p1 and [dbo].[mainclass].[someproperty] <= @p2)) select [dbo].[mainclass].[id], [dbo].[mainclass].[someproperty], [dbo].[mainclass].[someproperty2], [dbo].[mainclass].[someproperty3], [dbo].[mainclass].[someproperty4], [dbo].[childclass].[id] as [__withn__childclass__id], [dbo].[childclass].[someproperty] as [__withn__childclass__someproperty], [dbo].[childclass].[someproperty2] as [__withn__childclass__someproperty2] from __data join [dbo].[promoposts] on [dbo].[promoposts].[id] = __data.[id]from [dbo].[mainclass] left join [dbo].[jointable] on ([dbo].[mainclass].[id] = [dbo].[jointable].[mainclassid]) left join [dbo].[childclass] on ([dbo].[childclass].[id] = [dbo].[jointable].[childclassid]) where ([dbo].[mainclass].[someproperty] > @p1 and [dbo].[mainclass].[someproperty] <= @p2) and [_#_] between 1 and 25";
+            const string expected = "with __data as (" +
+                                    "select [dbo].[mainclass].[id], [dbo].[mainclass].[someproperty], [dbo].[mainclass].[someproperty2], [dbo].[mainclass].[someproperty3], [dbo].[mainclass].[someproperty4], [dbo].[childclass].[id] as [__withn__childclass__id], [dbo].[childclass].[someproperty] as [__withn__childclass__someproperty], [dbo].[childclass].[someproperty2] as [__withn__childclass__someproperty2] , " +
+                                    "row_number() over (order by [dbo].[promoposts].[id]) as [_#_] from [dbo].[mainclass] left join [dbo].[jointable] on ([dbo].[mainclass].[id] = [dbo].[jointable].[mainclassid]) left join [dbo].[childclass] on ([dbo].[childclass].[id] = [dbo].[jointable].[childclassid]) " +
+                                    "where ([dbo].[mainclass].[someproperty] > @p1 and [dbo].[mainclass].[someproperty] <= @p2) ) " +
+                                    "select * from __data where [_#_] between 1 and 25 order by [_#_]";
 
             var pagedSql = new SqlQueryPager().ApplyPaging(sql, new[] {"[dbo].[PromoPosts].[Id]"}, 0, 25).Single();
             var modified = Normalize.Replace(pagedSql, " ").ToLowerInvariant();
@@ -117,11 +126,40 @@ namespace Simple.Data.SqlTest
         [Test]
         public void ShouldThrowIfTableHasNoPrimaryKey([Values(null, new string[0])]string[] keys)
         {
-            var sql = "select [dbo].[d].[a] from [dbo].[b]";
+            const string sql = "select [dbo].[d].[a] from [dbo].[b]";
 
             Assert.Throws<AdoAdapterException>(
                 () => new SqlQueryPager().ApplyPaging(sql, keys, 5, 10).ToList()
             );
+        }
+
+        [Test]
+        public void ShouldApplyPagingWithOrderByColumnsFromJoinedTables()
+        {
+            // given
+            const string sql =
+                @"SELECT 
+                    [dbo].[MainTable].[id], 
+                    [dbo].[MainTable].[name],
+                    [dbo].[JoinedTable].[id] AS [__withn__JoinedTable__ID],  
+                FROM [dbo].[MainTable] 
+                INNER JOIN [dbo].[JoinedTable] ON [dbo].[MainTable].[id] = [dbo].[JoinedTable].[joinId] 
+                WHERE [dbo].[MainTable].[value] > 21
+                ORDER BY [dbo].[JoinedTable].[a] DESC, [dbo].[MainTable].[id] ASC";
+            var tested = new SqlQueryPager();
+            var keys = new [] {"[dbo].[Table1].[a]"};
+            const int skip = 6;
+            const int take = 2;
+
+            // when
+            var pagedSql = tested.ApplyPaging(sql, keys, skip, take)
+                .Single();
+
+            // then
+            var normalized = Normalize.Replace(pagedSql, " ").ToLowerInvariant();
+            const string expected =
+                "with __data as (select [dbo].[maintable].[id], [dbo].[maintable].[name], [dbo].[joinedtable].[id] as [__withn__joinedtable__id], , row_number() over (order by [dbo].[joinedtable].[a] desc, [dbo].[maintable].[id] asc ) as [_#_] from [dbo].[maintable] inner join [dbo].[joinedtable] on [dbo].[maintable].[id] = [dbo].[joinedtable].[joinid] where [dbo].[maintable].[value] > 21 ) select * from __data where [_#_] between 7 and 8 order by [_#_]";
+            Assert.AreEqual(expected, normalized);
         }
     }
 }
